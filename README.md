@@ -21,11 +21,9 @@ This code is mean to run on a Lego EV3 bot under the conditions described in the
 
 We have created a `Robot` class that will abstract away a lot of the details for the robot. This allows us to program an abstract method of finding the tower, without having to constantly add checks for things like black squares.
 
-We have decided to decouple the position representation of our robot from the detection of the black squares. This means that even if we miss a black square (possible due to messy real world application) we will not move an entire square off where we *think* we are. By making our position representation depend only on how far we have moved, we allow for more accurate methods.
+We have also decided that to simplify the representation we will use cartesian coordinates to represent position, with integer values corresponding to black squares. For example, when the light sensor is exactly over black square 1 we are at coordinate (0,0). At black square 34 we are at (3,2).
 
-We have also decided that to simplify the representation we will use cartesian coordinates to represent position, with integer values corresponding to black squares. For example, when the rotation axis is exactly over black square 1 we are at coordinate (0,0). At black square 34 we are at (3,2).
-
-We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles, although our code has support for general rotations and speeds.
+We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles.
 
 Our current attack plan is to move to coordinate (10, 3) i.e. black square 56 and then try columns methodically until we touch the tower using the `check_distance_for_touch` method. 
 
@@ -43,12 +41,31 @@ An internal abstraction of the robot to offer basic functionality without worryi
     * `color_sensor`: The color sensor of the robot
     * `sound`: The sound module of the robot
     * `lcd`: The display of the robot, easily used with `robot.display_text`
+    * `black_square_sensor`: A reference to the object that handles sensing the black square
     
 * Constants
-    * `DISTANCE_BLACK_SQUARE_SEPARATION`: The distance between black squares in wheel rotation units, so we can easily move between squares
     * `DISTANCE_TO_ROTATION_AXIS`: The distance from the light sensor to the rotation axis of the tank, so we can easily move from the light sensor being over a square (start position) to the rotation axis being over a square (position notation)
     
 * Representations
     * `position`: The position of the robot in cartesian coordinates. Notice that the robot starts at (0,0). Also notice that we take the integer values of the coordinates to be when the rotation axis is over the squares
     * `direction`: The current direction in which the robot faces. Notice that the y-axis is inverted so moving down is in the positive direction
+    
+    
+`BlackSquareSensor`
+
+An object that handles the constant reading, writing, and averaging of results. This class can read the color at set intervals, and has methods to tell easily if we are above a threshold (on a black square or not)
+
+*Should* be thread-safe
+
+* Attributes
+    * `ROLLING_AVERAGE_COUNT`: The number of values to average over, more values means lower uncertainty/better tolerance to noise, but longer time to change average
+    * `VALUE_LIST`: The list of values that have been read
+    * `VALUE_LIST_LOCK`: A Lock object from the Threading class, so we can be sure we don't run into race conditions when writing/taking averages
+    * `CONSTANT_READ`: A boolean to check if we are to be constantly reading (Thread termination condition)
+    * `CURRENT_INDEX`: The current index into the `VALUE_LIST` array that we are writing to
+    * `THRESHOLD`: The threshold that must be surpassed to be on a white square
+    * `SENSOR`: The sensor to read from
+    * `THREAD`: A reference to the thread
+    
+
 
