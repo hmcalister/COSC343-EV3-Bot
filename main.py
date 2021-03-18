@@ -298,6 +298,7 @@ class Robot:
         #TODO Ensure this reports correct blue number
         blue_number = 3 * (math.floor(self.position[1]) - 3) + (self.position[0] - 10) // 2 + 1
         self.display_text(blue_number)
+        self.sound.beep()
 
     def display_text(self, string, font_name='courB24', font_width=15, font_height=24):
         """

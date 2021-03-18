@@ -23,12 +23,17 @@ We have created a `Robot` class that will abstract away a lot of the details for
 
 We have also decided that to simplify the representation we will use cartesian coordinates to represent position, with integer values corresponding to black squares. For example, when the light sensor is exactly over black square 1 we are at coordinate (0,0). At black square 34 we are at (3,2).
 
-We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles.
+We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles, although the code should support other movements.
 
-Our current attack plan is to move to coordinate (10, 3) i.e. black square 56 and then try columns methodically until we touch the tower using the `check_distance_for_touch` method. 
+The basic method can be outlined as
+* Use `robot.move` and `robot.rotate` to get to (10,3) i.e. black square 56
+    * `robot.move` handles the black square reporting (when the sensing demands it)
+* Use `robot.check_next` over the first column of the red area
+* Rotate around and position self to check the second column from below
+* Do the same for the final column
 
 ## Documentation
-`Robot`
+### `Robot`
 
 An internal abstraction of the robot to offer basic functionality without worrying about the environment
    
@@ -51,7 +56,7 @@ An internal abstraction of the robot to offer basic functionality without worryi
     * `direction`: The current direction in which the robot faces. Notice that the y-axis is inverted so moving down is in the positive direction
     
     
-`BlackSquareSensor`
+### `BlackSquareSensor`
 
 An object that handles the constant reading, writing, and averaging of results. This class can read the color at set intervals, and has methods to tell easily if we are above a threshold (on a black square or not)
 
