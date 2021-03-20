@@ -1,6 +1,7 @@
-#!/user/bin/env python3
+#!/usr/bin/env python3
 from ev3dev2. motor import LargeMotor, OUTPUT_B, OUTPUT_C, SpeedPercent, SpeedDPS, MoveTank
 from ev3dev2.sensor.lego import TouchSensor, UltrasonicSensor, ColorSensor
+from ev3dev2.button import Button
 from ev3dev2.sound import Sound
 from ev3dev2.display import Display
 import threading
@@ -19,12 +20,11 @@ class BlackSquareSensor:
     VALUE_LIST_LOCK = threading.Lock()
     CONSTANT_READ = False
     CURRENT_INDEX = 0
-    #TODO Find a good threshold value
-    THRESHOLD = 0
+    THRESHOLD = 22
     SENSOR = None
     THREAD = None
 
-    def __init__(self, sensor, count=5):
+    def __init__(self, sensor):
         """
         Create a new instance of the square sensor
         :param sensor: The sensor to use for color sensing
@@ -44,7 +44,7 @@ class BlackSquareSensor:
         :return: None
         """
 
-        if self.THREAD is None:
+        if self.THREAD is not None:
             #Kill old thread
             self.stop_reading()
 
@@ -54,7 +54,7 @@ class BlackSquareSensor:
 
         self.CURRENT_INDEX = 0
         self.CONSTANT_READ = True
-        self.THREAD = threading.Thread(target=self.constant_read, args=(self, interval, wait_time, ))
+        self.THREAD = threading.Thread(target=self.constant_read, args=[interval, wait_time])
         self.THREAD.start()
 
     def stop_reading(self):
@@ -136,10 +136,11 @@ class Robot:
     color_sensor
     sound = Sound()
     lcd = Display()
+    btn = Button()
     black_square_sensor = BlackSquareSensor(color_sensor)
 
     #Useful preset (read: hardcoded) values
-    DISTANCE_TO_ROTATION_AXIS = 1
+    DISTANCE_TO_ROTATION_AXIS = 0.25
 
     def __init__(self, start_position=[0,0], start_direction=[0,-1], debug=False):
         """
@@ -151,8 +152,9 @@ class Robot:
 
         self.position = start_position
         self.direction = start_direction
+        self.display_text("Start")
 
-    def move(self, speed=50):
+    def move(self, speed=25):
         """
         Move forward as a tank until it hits a black square and update the position
         :param speed: The speed to move
@@ -164,7 +166,7 @@ class Robot:
         self.position[1] += self.direction[1]
 
         #We start on a black square so we initalise to being on a white square
-        self.black_square_sensor.start_reading(count=3, init_val=100, interval=0.25, wait_time=1)
+        self.black_square_sensor.start_reading(count=4, init_val=100, interval=0.1, wait_time=0.5)
 
         #Until we hit a black square, just keep moving forward
         self.tank.on(SpeedPercent(speed),SpeedPercent(speed))
@@ -176,7 +178,7 @@ class Robot:
         self.report_black_square()
         self.correction()
 
-    def check_next(self, speed=30):
+    def check_next(self, speed=25):
         """
         Perform a check of the space between current position and next black square
         This is very similiar to the move function, but has checks for touch
@@ -189,7 +191,7 @@ class Robot:
         self.position[1] += 0.5*self.direction[1]
 
         #We are on a black square, so we initalise to white
-        self.black_square_sensor.start_reading(count=3, init_val=100, interval=0.25, wait_time=1)
+        self.black_square_sensor.start_reading(count=3, init_val=100, interval=0.1, wait_time=0.5)
 
         #TODO ensure that this finds the tower well and doesn't push it
         # Could use the sonar sensor too
@@ -207,9 +209,12 @@ class Robot:
         # We are now over a black square, do a correction for any deviation
         self.report_black_square()
         self.correction()
+
+        self.position[0] += 0.5 * self.direction[0]
+        self.position[1] += 0.5 * self.direction[1]
         return False
 
-    def correction(self, dps=30):
+    def correction(self, dps=180):
         """
         Do a correction for any deviation after travelling between squares
         The implementation below assumes that we didn't deviate too far between black squares
@@ -226,33 +231,33 @@ class Robot:
         # Stop the old thread to start a new one with better parameters
         self.black_square_sensor.stop_reading()
         #Currently on a black square, move until on a white square
-        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0)
+        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0.2)
 
         #TODO Ensure this makes an adeuqete correction between both square spacings
         #While we are not back on the white keep turning
         start = time.time()
-        self.tank.on(SpeedDPS(-dps), SpeedDPS(dps))
+        self.tank.on(0, SpeedDPS(dps))
         while not self.black_square_sensor.above_threshold():
             continue
         end = time.time()
         left_angle = dps*(end-start)
         #We now know angular deviation to left, reset by moving back
-        self.tank.on_for_degrees(SpeedDPS(dps), SpeedDPS(-dps), left_angle)
+        self.tank.on_for_degrees(0, SpeedDPS(-dps), left_angle)
 
         #Do the same for the right angle
-        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0)
+        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0.2)
         start = time.time()
-        self.tank.on(SpeedDPS(-dps), SpeedDPS(dps))
+        self.tank.on(SpeedDPS(dps), 0)
         while not self.black_square_sensor.above_threshold():
             continue
         end = time.time()
         right_angle = dps * (end - start)
-        # We now know angular deviation to left, reset by moving back
-        self.tank.on_for_degrees(SpeedDPS(dps), SpeedDPS(-dps), left_angle)
+        self.tank.on_for_degrees(SpeedDPS(-dps), 0, right_angle)
 
         # Now we have both left and right angles, lets average then move to corrected bearing
         angle_correction = (left_angle - right_angle) / 2
-        self.tank.on_for_degrees(SpeedDPS(dps), 0, right_angle + angle_correction)
+        angle_correction = (90/math.pi)*math.atan(math.radians(angle_correction))
+        self.tank.on_for_degrees(SpeedDPS(-dps), SpeedDPS(dps), angle_correction)
 
     def rotate(self, angle_count, speed=30):
         """
@@ -274,7 +279,7 @@ class Robot:
         self.tank.on_for_rotations(SpeedPercent(speed), SpeedPercent(speed), self.DISTANCE_TO_ROTATION_AXIS)
 
         #Now actually rotate on the axis
-        self.tank.on_for_degrees(SpeedPercent(-speed), SpeedPercent(speed), 1.9*angle_count*90)
+        self.tank.on_for_degrees(SpeedPercent(-speed), SpeedPercent(speed), 1.87*angle_count*90)
 
         #Finally, undo the prepartation by moving backwards and placing the light sensor over the black square
         self.tank.on_for_rotations(SpeedPercent(speed), SpeedPercent(speed), -self.DISTANCE_TO_ROTATION_AXIS)
@@ -288,7 +293,9 @@ class Robot:
 
         #TODO Ensure this reports correct square numbers
         number = (self.position[0] + 1) + (self.position[1]) * 15
-        self.display_text(self, str(number))
+        self.display_text(str(number))
+        #TODO Maybe use this for the assignment
+        # self.sound.speak(str(number))
 
     def report_touch(self):
         """
@@ -315,3 +322,29 @@ class Robot:
         self.lcd.text_pixels(string, clear_screen=True, x=30, y=30, font=font_name)
         self.lcd.update()
 
+    def finish(self):
+        """
+        Finish the robots task and free resources
+        :return: None
+        """
+
+        self.black_square_sensor.stop_reading()
+
+
+if __name__ == "__main__":
+    print("START")
+    robot = Robot()
+    robot.btn.wait_for_bump('enter')
+    robot.sound.beep()
+    while not robot.touch_sensor.is_pressed:
+        # robot.move()
+        # robot.rotate(1)
+        for i in range(10):
+            robot.move()
+        robot.sound.speak(str(robot.position))
+        robot.rotate(1)
+        for i in range(2):
+            robot.move()
+        robot.sound.speak(str(robot.position))
+    robot.finish()
+    print("END")
