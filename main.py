@@ -73,6 +73,8 @@ class BlackSquareSensor:
             continue
         #Now thread is dead, we can quit
         self.THREAD = None
+        if self.VALUE_LIST_LOCK.locked():
+            self.VALUE_LIST_LOCK.release()
 
 
     def constant_read(self, interval, wait_time):
@@ -84,7 +86,6 @@ class BlackSquareSensor:
         """
 
         time.sleep(wait_time)
-
         while self.CONSTANT_READ:
             time.sleep(interval)
             self.take_reading()
@@ -113,7 +114,17 @@ class BlackSquareSensor:
         self.VALUE_LIST_LOCK.acquire()
         average = sum(self.VALUE_LIST)/len(self.VALUE_LIST)
         self.VALUE_LIST_LOCK.release()
+        print("AVERAGE: " + str(average))
         return average
+
+    def get_last_result(self):
+        """
+        Get the last result read from the sensor
+        Warning: I didn't make a lock for this because I'm lazy and this is for debugging only
+        :return: The last light level detected from the sensor
+        """
+
+        return self.VALUE_LIST[(self.CURRENT_INDEX-1)%len(self.VALUE_LIST)]
 
     def above_threshold(self):
         """
@@ -133,7 +144,6 @@ class Robot:
     touch_sensor = TouchSensor()
     ultrasonic_sensor = UltrasonicSensor()
     color_sensor = ColorSensor()
-    color_sensor
     sound = Sound()
     lcd = Display()
     btn = Button()
@@ -153,7 +163,7 @@ class Robot:
         self.direction = start_direction
         self.sound.set_volume(100)
         self.display_text("Start")
-
+        
     def move(self, speed=25):
         """
         Move forward as a tank until it hits a black square and update the position
@@ -177,6 +187,7 @@ class Robot:
         robot.correction()
 
     def check_next(self, speed=25):
+
         """
         Perform a check of the space between current position and next black square
         This is very similiar to the move function, but has checks for touch
@@ -208,8 +219,6 @@ class Robot:
         self.position[1] += 0.5 * self.direction[1]
         self.report_black_square()
         robot.correction()
-
-
         return False
 
     def correction(self, dps=180):
@@ -230,7 +239,6 @@ class Robot:
         self.black_square_sensor.stop_reading()
         #Currently on a black square, move until on a white square
         self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0.2)
-
         #While we are not back on the white keep turning
         start = time.time()
         self.tank.on(0, SpeedDPS(dps))
@@ -240,7 +248,6 @@ class Robot:
         left_angle = dps*(end-start)
         #We now know angular deviation to left, reset by moving back
         self.tank.on_for_degrees(0, SpeedDPS(-dps), left_angle)
-
         #Do the same for the right angle
         self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0.2)
         start = time.time()
@@ -372,3 +379,4 @@ if __name__ == "__main__":
             end(robot)
     robot.finish()
     print("END")
+
