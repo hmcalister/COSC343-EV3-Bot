@@ -24,11 +24,12 @@ We have also decided that to simplify the representation we will use cartesian c
 
 We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles, although the code should support other movements.
 
+## Overview of Implementation
 The basic method can be outlined as
-* Use `robot.move` and `robot.rotate` to get to (10,3) i.e. black square 56
+* Use `robot.move` and `robot.rotate` to get to (0,10) and then (10,3) i.e. black square 11 then 56
     * `robot.move` handles the black square reporting (when the sensing demands it)
 * Use `robot.check_next` over the first column of the red area
-* Rotate around and position self to check the second column from below
+* Rotate around and position self to check the second column from below, then check this
 * Do the same for the final column
 
 ## Documentation
@@ -71,5 +72,26 @@ An object that handles the constant reading, writing, and averaging of results. 
     * `SENSOR`: The sensor to read from
     * `THREAD`: A reference to the thread
     
+## Overview of Thread Implementation
+```
+main thread
+    |
+    |
+Create robot
+    |                           Sensor Thread
+    |_________________________________
+    |                                 |
+    |                                 |
+Robot Moves,              Constantly Read from light sensor
+Rotates on main           and update the value array
+    |                              
+Read from value array                
+
+
+
+to take average
+```
+
+As above, the value array is accessed by both threads, so we have a value_array_lock so we can't run into race conditions. The small amount of overhead from this is negligible compared to the possibility of crashing due to thread problems.
 
 
