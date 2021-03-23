@@ -190,9 +190,9 @@ class Robot:
 
         """
         Perform a check of the space between current position and next black square
-        This is very similiar to the move function, but has checks for touch
+        This is very similiar to the move function, but has checks for sonar
         :param speed: The speed which we travel over next space
-        :return: True if touch sensor is activated during journey, False otherwise
+        :return: True if sonar sensor is activated during journey, False otherwise
         """
 
         # Add half of position now, half later so we are sure to be in square
@@ -206,7 +206,7 @@ class Robot:
 
         # Until we hit a black square, just keep moving forward
         self.tank.on(SpeedPercent(speed), SpeedPercent(speed))
-        # Block until we are over a black square or until we touch something
+        # Block until we are over a black square or until we sense something
         while self.black_square_sensor.above_threshold() and self.ultrasonic_sensor.distance_centimeters>distance_threshold:
             continue
         self.tank.off()
