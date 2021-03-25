@@ -22,7 +22,7 @@ We have created `BlackSquareSensor` class so we can continually sense our robots
 
 We have also decided that to simplify the representation we will use cartesian coordinates to represent position, with integer values corresponding to black squares. For example, when the light sensor is exactly over black square 1 we are at coordinate (0,0). At black square 34 we are at (3,2).
 
-We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles, although the code should support other movements.
+We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles.
 
 ## Overview of Implementation
 The basic method can be outlined as
@@ -86,9 +86,6 @@ Robot Moves,              Constantly Read from light sensor
 Rotates on main           and update the value array
     |                              
 Read from value array                
-
-
-
 to take average
 ```
 

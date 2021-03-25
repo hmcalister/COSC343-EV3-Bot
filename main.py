@@ -28,7 +28,6 @@ class BlackSquareSensor:
         """
         Create a new instance of the square sensor
         :param sensor: The sensor to use for color sensing
-        :param count: The number of values to hold in the rolling average, default 5
         """
 
         #Set the sensor and take an initial value
@@ -114,17 +113,7 @@ class BlackSquareSensor:
         self.VALUE_LIST_LOCK.acquire()
         average = sum(self.VALUE_LIST)/len(self.VALUE_LIST)
         self.VALUE_LIST_LOCK.release()
-        print("AVERAGE: " + str(average))
         return average
-
-    def get_last_result(self):
-        """
-        Get the last result read from the sensor
-        Warning: I didn't make a lock for this because I'm lazy and this is for debugging only
-        :return: The last light level detected from the sensor
-        """
-
-        return self.VALUE_LIST[(self.CURRENT_INDEX-1)%len(self.VALUE_LIST)]
 
     def above_threshold(self):
         """
@@ -184,7 +173,17 @@ class Robot:
             continue
         self.tank.off()
         self.report_black_square()
-        robot.correction()
+        self.correction()
+
+    def move_number(self, n):
+        """
+        Move forward a number of black squares n
+        :param n: the number of squares to move forward
+        :return: None
+        """
+
+        for i in range(n):
+            self.move()
 
     def check_next(self, speed=25):
 
@@ -218,7 +217,19 @@ class Robot:
         self.position[0] += 0.5 * self.direction[0]
         self.position[1] += 0.5 * self.direction[1]
         self.report_black_square()
-        robot.correction()
+        self.correction()
+        return False
+
+    def check_next_number(self, n):
+        """
+        Check the next n squares
+        :param n: The number of squares to check
+        :return: True if sonar sensor is activated during journey, False otherwise
+        """
+
+        for i in range(n):
+            if self.check_next():
+                return True
         return False
 
     def correction(self, dps=180):
@@ -238,7 +249,7 @@ class Robot:
         # Stop the old thread to start a new one with better parameters
         self.black_square_sensor.stop_reading()
         #Currently on a black square, move until on a white square
-        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0.2)
+        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0)
         #While we are not back on the white keep turning
         start = time.time()
         self.tank.on(0, SpeedDPS(dps))
@@ -249,7 +260,7 @@ class Robot:
         #We now know angular deviation to left, reset by moving back
         self.tank.on_for_degrees(0, SpeedDPS(-dps), left_angle)
         #Do the same for the right angle
-        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0.2)
+        self.black_square_sensor.start_reading(count=2, init_val=0, interval=0.1, wait_time=0)
         start = time.time()
         self.tank.on(SpeedDPS(dps), 0)
         while not self.black_square_sensor.above_threshold():
@@ -260,8 +271,8 @@ class Robot:
 
         # Now we have both left and right angles, lets average then move to corrected bearing
         angle_correction = (left_angle - right_angle) / 2
-        angle_correction = 0.65*(90/math.pi)*math.atan(math.radians(angle_correction))
-        self.tank.on_for_degrees(SpeedDPS(-dps), SpeedDPS(dps), angle_correction)
+        #angle_correction = (90/math.pi)*0.75*math.atan(math.radians(angle_correction))
+        self.tank.on_for_degrees(SpeedDPS(-dps), SpeedDPS(dps), angle_correction/3)
 
     def rotate(self, angle_count, speed=25):
         """
@@ -296,8 +307,8 @@ class Robot:
         """
 
         number = (self.position[0] + 1) + (self.position[1]) * 15
-        self.display_text(str(int(number)))
-        self.sound.speak(str(int(number)))
+        #self.display_text(str(int(number)))
+        #self.sound.speak(str(int(number)))
 
     def report_tower(self):
         """
@@ -305,7 +316,6 @@ class Robot:
         :return: None
         """
 
-        #TODO Ensure this reports correct blue number
         blue_number = 3 * (math.floor(self.position[1]) - 3) + (math.floor(self.position[0]) - 9) // 2 + 1
         self.display_text(str(int(blue_number)))
         self.sound.speak(str(int(blue_number)))
@@ -331,6 +341,7 @@ class Robot:
 
         self.black_square_sensor.stop_reading()
 
+# --------------------------------------------------------------------------------------------------
 
 def end(robot):
     robot.sound.beep()
@@ -343,40 +354,61 @@ if __name__ == "__main__":
     robot.btn.wait_for_bump('enter')
     robot.sound.beep()
 
-    #Get the robot onto the black square
-    robot.tank.on_for_degrees(SpeedPercent(30), SpeedPercent(30), 270)
-    #Rotate to face down the first row
-    robot.rotate(-1)
-    #Move up to squre 11
-    for i in range(10):
+    # DO NOT DELETE: ACTUAL IMPLEMENTATION OF SEARCH
+    # #Get the robot onto the black square
+    # robot.tank.on_for_degrees(SpeedPercent(30), SpeedPercent(30), 270)
+    # #Rotate to face down the first row
+    # robot.rotate(-1)
+    # robot.report_black_square()
+    # #Move up to sqaure 11
+    # robot.move_number(10)
+    # #Rotate to face down the column
+    # robot.rotate(-1)
+    # #Move down to square 56
+    # robot.move_number(3)
+    # #Check the first column
+    # if robot.check_next_number(4):
+    #     end(robot)
+    # #Move to square 118 to try next column
+    # robot.rotate(1)
+    # robot.move(2)
+    # robot.rotate(1)
+    # #Try the second column
+    # if robot.check_next_number(4):
+    #     end(robot)
+    # #Move to square 60 to try third column
+    # robot.rotate(-1)
+    # robot.move(2)
+    # robot.rotate(-1)
+    # #Try the third column
+    # if robot.check_next(4):
+    #     end(robot)
+
+    while not robot.touch_sensor.is_pressed:
         robot.move()
-    #Rotate to face down the column
-    robot.rotate(-1)
-    #Move down to square 56
-    for i in range(3):
-        robot.move()
+        robot.rotate(1)
+
+    robot.btn.wait_for_bump('enter')
+    robot.sound.beep()
+
     #Check the first column
-    for i in range(4):
-        if robot.check_next():
-            end(robot)
+    if robot.check_next_number(4):
+        end(robot)
     #Move to square 118 to try next column
     robot.rotate(1)
-    robot.move()
-    robot.move()
+    robot.move(2)
     robot.rotate(1)
     #Try the second column
-    for i in range(4):
-        if robot.check_next():
-            end(robot)
+    if robot.check_next_number(4):
+        end(robot)
     #Move to square 60 to try third column
     robot.rotate(-1)
-    robot.move()
-    robot.move()
+    robot.move(2)
     robot.rotate(-1)
     #Try the third column
-    for i in range(4):
-        if robot.check_next():
-            end(robot)
+    if robot.check_next(4):
+        end(robot)
+
     robot.finish()
     print("END")
 
