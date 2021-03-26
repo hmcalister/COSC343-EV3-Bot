@@ -255,7 +255,7 @@ class Robot:
                 self.report_tower()
                 return True
             time.sleep(0.1)
-        self.tank.on_for_degrees(SpeedPercent(-speed), 0, step) 
+        self.tank.on_for_degrees(SpeedPercent(-speed), 0, step)
 
         distance_threshold = 15
 
