@@ -12,24 +12,24 @@ This code is mean to run on a Lego EV3 bot under the conditions described in the
     * If we explore the columns we only need to make (at most) 3 explorations rather than 4 if we go by rows
     * If we explore the columns left to right we can stick to the left hand side of the column as we know this is empty, and we have no chance of bumping the tower if it is to the right of our bot
 
-* We can easily report something (e.g. black square number) using the display, which can be accessed by `print()`. Alternatively we can use te `Display` module provided by `ev3dev2`
-    * We found a great code snippet from https://sites.google.com/site/ev3devpython/learn_ev3_python/screen that prints text centered on the screen nicely, using `Display`
-    
 * We have decided to invert the y-axis (so the robot is currently facing the negative y-axis) as this is generally more useful for the directions we are moving.
     
 ## Our Apporach
 
 We have created a `Robot` class that will abstract away a lot of the details for the robot. This allows us to program an abstract method of finding the tower, without having to constantly add checks for things like black squares.
 
+We have created `BlackSquareSensor` class so we can continually sense our robots environment using a separate thread
+
 We have also decided that to simplify the representation we will use cartesian coordinates to represent position, with integer values corresponding to black squares. For example, when the light sensor is exactly over black square 1 we are at coordinate (0,0). At black square 34 we are at (3,2).
 
 We have decided to keep to the basic movement options of moving strictly forward and turning only at right angles, although the code should support other movements.
 
+## Overview of Implementation
 The basic method can be outlined as
-* Use `robot.move` and `robot.rotate` to get to (10,3) i.e. black square 56
+* Use `robot.move` and `robot.rotate` to get to (0,10) and then (10,3) i.e. black square 11 then 56
     * `robot.move` handles the black square reporting (when the sensing demands it)
 * Use `robot.check_next` over the first column of the red area
-* Rotate around and position self to check the second column from below
+* Rotate around and position self to check the second column from below, then check this
 * Do the same for the final column
 
 ## Documentation
@@ -46,6 +46,7 @@ An internal abstraction of the robot to offer basic functionality without worryi
     * `color_sensor`: The color sensor of the robot
     * `sound`: The sound module of the robot
     * `lcd`: The display of the robot, easily used with `robot.display_text`
+    * `btn`: The buttons of the robot
     * `black_square_sensor`: A reference to the object that handles sensing the black square
     
 * Constants
@@ -63,7 +64,6 @@ An object that handles the constant reading, writing, and averaging of results. 
 *Should* be thread-safe
 
 * Attributes
-    * `ROLLING_AVERAGE_COUNT`: The number of values to average over, more values means lower uncertainty/better tolerance to noise, but longer time to change average
     * `VALUE_LIST`: The list of values that have been read
     * `VALUE_LIST_LOCK`: A Lock object from the Threading class, so we can be sure we don't run into race conditions when writing/taking averages
     * `CONSTANT_READ`: A boolean to check if we are to be constantly reading (Thread termination condition)
@@ -72,5 +72,26 @@ An object that handles the constant reading, writing, and averaging of results. 
     * `SENSOR`: The sensor to read from
     * `THREAD`: A reference to the thread
     
+## Overview of Thread Implementation
+```
+main thread
+    |
+    |
+Create robot
+    |                           Sensor Thread
+    |_________________________________
+    |                                 |
+    |                                 |
+Robot Moves,              Constantly Read from light sensor
+Rotates on main           and update the value array
+    |                              
+Read from value array                
+
+
+
+to take average
+```
+
+As above, the value array is accessed by both threads, so we have a value_array_lock so we can't run into race conditions. The small amount of overhead from this is negligible compared to the possibility of crashing due to thread problems.
 
 
