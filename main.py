@@ -164,17 +164,53 @@ class Robot:
         self.position[0] += self.direction[0]
         self.position[1] += self.direction[1]
 
+        #Find the maximum time we can travel for in this direction before returning back along the path
+        if direction[0] != 0:
+            #We are traveling in the x direction
+            #TODO Find the max travel time in the x direction
+            MAX_TIME = 1
+        else:
+            #We are traveling in the y direction
+            #TODO find the max travel time in the y direction
+            MAX_TIME=1
+
         #We start on a black square so we initalise to being on a white square
         self.black_square_sensor.stop_reading()
         self.black_square_sensor.start_reading(count=7, init_val=100, interval=0.1, wait_time=1)
 
         #Until we hit a black square, just keep moving forward
+        start = time.time()
         self.tank.on(SpeedPercent(speed),SpeedPercent(speed))
+        #Block until we are over a black square
+        while self.black_square_sensor.above_threshold():
+            if time.time()-start > MAX_TIME:
+                self.tank.off()
+                self.move_back()
+                self.move()
+                return None
+
+        self.tank.off()
+        self.report_black_square()
+        self.correction()
+
+    def move_back(self, speed=20):
+        """
+        Move forward as a tank until it hits a black square and update the position
+        :param speed: The speed to move
+        :return: None
+        """
+
+        self.position[0] -= self.direction[0]
+        self.position[1] -= self.direction[1]
+        
+        #We start on a black square so we initalise to being on a white square
+        self.black_square_sensor.stop_reading()
+        self.black_square_sensor.start_reading(count=7, init_val=100, interval=0.1, wait_time=1)
+        self.tank.on(SpeedPercent(-speed),SpeedPercent(-speed))
         #Block until we are over a black square
         while self.black_square_sensor.above_threshold():
             continue
         self.tank.off()
-        self.report_black_square()
         self.correction()
 
     def move_number(self, n):
@@ -202,29 +238,24 @@ class Robot:
         distance_threshold = 36
 
         #Do a quick rotate and check for the tower, in case we miss it moving forward
-        degree_check = 75
-        time.sleep(0.5)
-        if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
-            # We have found it!
-            self.report_tower()
-            return True
-        time.sleep(0.5)
-        self.tank.on_for_degrees(0, SpeedPercent(speed), degree_check, block=True)
-        time.sleep(1)
-        if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
-            # We have found it!
-            self.report_tower()
-            return True
+        degree_check = 80
+        step = int(degree_check//10)
+        for i in range(0, degree_check, step):
+            self.tank.on_for_degrees(0, SpeedPercent(speed), step)
+            if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
+                # We have found it!
+                self.report_tower()
+                return True
+            time.sleep(0.1)
         self.tank.on_for_degrees(0, SpeedPercent(-speed), degree_check)
-        time.sleep(0.5)
-        self.tank.on_for_degrees(SpeedPercent(speed), 0, degree_check, block=True)
-        time.sleep(1)
-        if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
-            # We have found it!
-            self.report_tower()
-            return True
-        self.tank.on_for_degrees(SpeedPercent(-speed), 0, degree_check, block=True)
-        time.sleep(0.5)
+        for i in range(0, degree_check, step):
+            self.tank.on_for_degrees(SpeedPercent(speed), 0, step)
+            if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
+                # We have found it!
+                self.report_tower()
+                return True
+            time.sleep(0.1)
+        self.tank.on_for_degrees(SpeedPercent(-speed), 0, step)
 
         distance_threshold = 15
 
