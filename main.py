@@ -139,7 +139,7 @@ class Robot:
     black_square_sensor = BlackSquareSensor(color_sensor)
 
     #Useful preset (read: hardcoded) values
-    DISTANCE_TO_ROTATION_AXIS = 0.25
+    DISTANCE_TO_ROTATION_AXIS = 0.275
 
     def __init__(self, start_position=[0,0], start_direction=[0,-1]):
         """
@@ -151,9 +151,10 @@ class Robot:
         self.position = start_position
         self.direction = start_direction
         self.sound.set_volume(100)
+        self.ultrasonic_sensor.distance_centimeters_continuous
         self.display_text("Start")
         
-    def move(self, speed=25):
+    def move(self, speed=20):
         """
         Move forward as a tank until it hits a black square and update the position
         :param speed: The speed to move
@@ -164,7 +165,8 @@ class Robot:
         self.position[1] += self.direction[1]
 
         #We start on a black square so we initalise to being on a white square
-        self.black_square_sensor.start_reading(count=5, init_val=100, interval=0.1, wait_time=1)
+        self.black_square_sensor.stop_reading()
+        self.black_square_sensor.start_reading(count=7, init_val=100, interval=0.1, wait_time=1)
 
         #Until we hit a black square, just keep moving forward
         self.tank.on(SpeedPercent(speed),SpeedPercent(speed))
@@ -185,7 +187,7 @@ class Robot:
         for i in range(n):
             self.move()
 
-    def check_next(self, speed=25):
+    def check_next(self, speed=20):
 
         """
         Perform a check of the space between current position and next black square
@@ -197,19 +199,46 @@ class Robot:
         # Add half of position now, half later so we are sure to be in square
         self.position[0] += 0.5*self.direction[0]
         self.position[1] += 0.5*self.direction[1]
+        distance_threshold = 36
+
+        #Do a quick rotate and check for the tower, in case we miss it moving forward
+        degree_check = 75
+        time.sleep(0.5)
+        if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
+            # We have found it!
+            self.report_tower()
+            return True
+        time.sleep(0.5)
+        self.tank.on_for_degrees(0, SpeedPercent(speed), degree_check, block=True)
+        time.sleep(1)
+        if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
+            # We have found it!
+            self.report_tower()
+            return True
+        self.tank.on_for_degrees(0, SpeedPercent(-speed), degree_check)
+        time.sleep(0.5)
+        self.tank.on_for_degrees(SpeedPercent(speed), 0, degree_check, block=True)
+        time.sleep(1)
+        if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
+            # We have found it!
+            self.report_tower()
+            return True
+        self.tank.on_for_degrees(SpeedPercent(-speed), 0, degree_check, block=True)
+        time.sleep(0.5)
+
+        distance_threshold = 15
 
         #We are on a black square, so we initalise to white
-        self.black_square_sensor.start_reading(count=5, init_val=100, interval=0.1, wait_time=1)
-
-        distance_threshold = 10
+        self.black_square_sensor.stop_reading()
+        self.black_square_sensor.start_reading(count=7, init_val=100, interval=0.1, wait_time=1)
 
         # Until we hit a black square, just keep moving forward
         self.tank.on(SpeedPercent(speed), SpeedPercent(speed))
         # Block until we are over a black square or until we sense something
-        while self.black_square_sensor.above_threshold() and self.ultrasonic_sensor.distance_centimeters>distance_threshold:
+        while self.black_square_sensor.above_threshold() and self.ultrasonic_sensor.distance_centimeters>distance_threshold and not self.touch_sensor.is_pressed:
             continue
         self.tank.off()
-        if self.ultrasonic_sensor.distance_centimeters<distance_threshold:
+        if self.ultrasonic_sensor.distance_centimeters_continuous<distance_threshold or self.touch_sensor.is_pressed:
             # We have found it!
             self.report_tower()
             return True
@@ -256,6 +285,7 @@ class Robot:
         while not self.black_square_sensor.above_threshold():
             continue
         end = time.time()
+        self.tank.off()
         left_angle = dps*(end-start)
         #We now know angular deviation to left, reset by moving back
         self.tank.on_for_degrees(0, SpeedDPS(-dps), left_angle)
@@ -266,13 +296,14 @@ class Robot:
         while not self.black_square_sensor.above_threshold():
             continue
         end = time.time()
+        self.tank.off()
         right_angle = dps * (end - start)
         self.tank.on_for_degrees(SpeedDPS(-dps), 0, right_angle)
 
         # Now we have both left and right angles, lets average then move to corrected bearing
         angle_correction = (left_angle - right_angle) / 2
-        #angle_correction = (90/math.pi)*0.75*math.atan(math.radians(angle_correction))
-        self.tank.on_for_degrees(SpeedDPS(-dps), SpeedDPS(dps), angle_correction/3)
+        angle_correction = (90/math.pi)*0.64*math.atan(math.radians(angle_correction))
+        self.tank.on_for_degrees(SpeedDPS(-dps), SpeedDPS(dps), angle_correction)
 
     def rotate(self, angle_count, speed=25):
         """
@@ -280,7 +311,7 @@ class Robot:
         We are defining positive rotation as turning clockwise
         :param angle_count: the angle to rotate through (as a multiple of 90 degrees)
         :param speed: The speed to rotate around at
-        :return:
+        :return: None
         """
 
         # Update direction using rotation matrix
@@ -307,8 +338,8 @@ class Robot:
         """
 
         number = (self.position[0] + 1) + (self.position[1]) * 15
-        #self.display_text(str(int(number)))
-        #self.sound.speak(str(int(number)))
+        self.display_text(str(int(number)))
+        self.sound.speak(str(int(number)))
 
     def report_tower(self):
         """
@@ -318,7 +349,7 @@ class Robot:
 
         blue_number = 3 * (math.floor(self.position[1]) - 3) + (math.floor(self.position[0]) - 9) // 2 + 1
         self.display_text(str(int(blue_number)))
-        self.sound.speak(str(int(blue_number)))
+        self.sound.speak("TOWER IS ON: "+str(int(blue_number)))
         self.sound.beep()
 
     def display_text(self, string, font='courB24'):
@@ -354,59 +385,34 @@ if __name__ == "__main__":
     robot.btn.wait_for_bump('enter')
     robot.sound.beep()
 
-    # DO NOT DELETE: ACTUAL IMPLEMENTATION OF SEARCH
-    # #Get the robot onto the black square
-    # robot.tank.on_for_degrees(SpeedPercent(30), SpeedPercent(30), 270)
-    # #Rotate to face down the first row
-    # robot.rotate(-1)
-    # robot.report_black_square()
-    # #Move up to sqaure 11
-    # robot.move_number(10)
-    # #Rotate to face down the column
-    # robot.rotate(-1)
-    # #Move down to square 56
-    # robot.move_number(3)
-    # #Check the first column
-    # if robot.check_next_number(4):
-    #     end(robot)
-    # #Move to square 118 to try next column
-    # robot.rotate(1)
-    # robot.move(2)
-    # robot.rotate(1)
-    # #Try the second column
-    # if robot.check_next_number(4):
-    #     end(robot)
-    # #Move to square 60 to try third column
-    # robot.rotate(-1)
-    # robot.move(2)
-    # robot.rotate(-1)
-    # #Try the third column
-    # if robot.check_next(4):
-    #     end(robot)
-
-    while not robot.touch_sensor.is_pressed:
-        robot.move()
-        robot.rotate(1)
-
-    robot.btn.wait_for_bump('enter')
-    robot.sound.beep()
-
+    #DO NOT DELETE: ACTUAL IMPLEMENTATION OF SEARCH
+    #Get the robot onto the black square
+    robot.tank.on_for_degrees(SpeedPercent(25), SpeedPercent(25), 270)
+    #Rotate to face down the first row
+    robot.rotate(-1)
+    robot.report_black_square()
+    #Move up to square 11
+    robot.move_number(10)
+    #Rotate to face down the column
+    robot.rotate(-1)
+    #Move down to square 56
+    robot.move_number(3)
     #Check the first column
     if robot.check_next_number(4):
         end(robot)
     #Move to square 118 to try next column
     robot.rotate(1)
-    robot.move(2)
+    robot.move_number(2)
     robot.rotate(1)
     #Try the second column
     if robot.check_next_number(4):
         end(robot)
     #Move to square 60 to try third column
     robot.rotate(-1)
-    robot.move(2)
+    robot.move_number(2)
     robot.rotate(-1)
     #Try the third column
-    if robot.check_next(4):
+    if robot.check_next_number(4):
         end(robot)
 
     robot.finish()
