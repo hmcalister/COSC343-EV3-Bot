@@ -48,6 +48,8 @@ An internal abstraction of the robot to offer basic functionality without worryi
     * `lcd`: The display of the robot, easily used with `robot.display_text`
     * `btn`: The buttons of the robot
     * `black_square_sensor`: A reference to the object that handles sensing the black square
+    * `max_travel_time`: The maximum time that we can travel in each direction
+    * `missed_tile_attempt`: The attempt number for when we are searching for the missed tile
     
 * Constants
     * `DISTANCE_TO_ROTATION_AXIS`: The distance from the light sensor to the rotation axis of the tank, so we can easily move from the light sensor being over a square (start position) to the rotation axis being over a square (position notation)
