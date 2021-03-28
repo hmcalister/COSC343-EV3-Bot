@@ -7,6 +7,7 @@ from ev3dev2.display import Display
 import threading
 import math
 import time
+import random
 
 
 
@@ -27,7 +28,7 @@ class BlackSquareSensor:
     def __init__(self, sensor):
         """
         Create a new instance of the square sensor
-        :param sensor: The sensor to use for color sensing
+        :param sensor: The sensor to use for color sensing, should be a ColorSensor
         """
 
         #Set the sensor and take an initial value
@@ -35,7 +36,7 @@ class BlackSquareSensor:
 
     def start_reading(self, count, init_val, interval, wait_time):
         """
-        Start taking constant readings on a thread
+        Start taking constant readings on a thread, killing any only threads and starting a new one
         :param count: The length of the value array, the number of values to average over
         :param init_val: The value to initalise the new array to, between 0 and 100
         :param interval: The interval to take readings at
@@ -58,7 +59,7 @@ class BlackSquareSensor:
 
     def stop_reading(self):
         """
-        Stops the reading thread
+        Stops the reading thread, killing the old thread
         :return: None
         """
 
@@ -91,9 +92,9 @@ class BlackSquareSensor:
 
     def take_reading(self):
         """
-        Take a reading from the color sensor
+        Take a single reading from the color sensor
         Extracted to a method so this can be easily changed later
-        :return: The reading of the color sensor
+        :return: int, The reading of the color sensor, in the range 0-100
         """
 
         #Make sure we only take a reading when the lock is in our hands
@@ -107,7 +108,7 @@ class BlackSquareSensor:
     def get_average_result(self):
         """
         Get the average value of all readings in the array
-        :return: The average reading over the array
+        :return: float, The average reading over the array, in the range 0.0-100.0
         """
 
         self.VALUE_LIST_LOCK.acquire()
@@ -119,7 +120,7 @@ class BlackSquareSensor:
         """
         Determine if the current average reading is above the threshold specified
         This is the check if we are over a black square
-        :return: True if average is above threshold (not on black square)
+        :return: bool, True if average is above threshold (not on black square)
         """
 
         return self.get_average_result() > self.THRESHOLD
@@ -137,27 +138,31 @@ class Robot:
     lcd = Display()
     btn = Button()
     black_square_sensor = BlackSquareSensor(color_sensor)
+    max_travel_times = [3.5,5]
+    MISSED_TILE_ATTEMPT = 0
 
     #Useful preset (read: hardcoded) values
     DISTANCE_TO_ROTATION_AXIS = 0.275
 
     def __init__(self, start_position=[0,0], start_direction=[0,-1]):
         """
-        Set the paramters for the robot
-        :param start_position: The start position of the robot
-        :param start_direction: The start direction vector of the robot
+        Set the parameters for the robot and initalise it
+        :param start_position: The start position of the robot in cartesian coordinates (x,y)
+        :param start_direction: The start direction vector of the robot as a vector (x,y)
         """
 
         self.position = start_position
         self.direction = start_direction
         self.sound.set_volume(100)
+        #Get the sensor to start sensing continuosly for later
         self.ultrasonic_sensor.distance_centimeters_continuous
         self.display_text("Start")
         
     def move(self, speed=20):
         """
         Move forward as a tank until it hits a black square and update the position
-        :param speed: The speed to move
+        If the black square is not reached in a certain time (defined in self.max_travel_times)
+        :param speed: The speed to move as a percentage of max speed
         :return: None
         """
 
@@ -165,14 +170,7 @@ class Robot:
         self.position[1] += self.direction[1]
 
         #Find the maximum time we can travel for in this direction before returning back along the path
-        if direction[0] != 0:
-            #We are traveling in the x direction
-            #TODO Find the max travel time in the x direction
-            MAX_TIME = 1
-        else:
-            #We are traveling in the y direction
-            #TODO find the max travel time in the y direction
-            MAX_TIME=1
+        MAX_TIME = abs(self.direction[0]*self.max_travel_times[0] + self.direction[1]*self.max_travel_times[1])
 
         #We start on a black square so we initalise to being on a white square
         self.black_square_sensor.stop_reading()
@@ -180,32 +178,45 @@ class Robot:
 
         #Until we hit a black square, just keep moving forward
         start = time.time()
-        self.tank.on(SpeedPercent(speed),SpeedPercent(speed))
+        self.tank.on(SpeedPercent(speed), SpeedPercent(speed))
         #Block until we are over a black square
         while self.black_square_sensor.above_threshold():
+            #Ensure that we have not travelled for too long
             if time.time()-start > MAX_TIME:
                 self.tank.off()
+                self.position[0] -= 1 * self.direction[0]
+                self.position[1] -= 1 * self.direction[1]
                 self.move_back()
+                self.tank.on_for_degrees(SpeedPercent(-speed), SpeedPercent(speed), -1.87 *
+                                         5 * (math.floor((self.MISSED_TILE_ATTEMPT + 1) / 2)) * (
+                                             -1) ** self.MISSED_TILE_ATTEMPT
+                                         )
+                self.MISSED_TILE_ATTEMPT += 1
+                self.tank.on_for_degrees(SpeedPercent(-speed), SpeedPercent(speed), 1.87 *
+                                         5 * (math.floor((self.MISSED_TILE_ATTEMPT + 1) / 2)) * (
+                                             -1) ** self.MISSED_TILE_ATTEMPT
+                                         )
                 self.move()
+                self.MISSED_TILE_ATTEMPT = 0
                 return None
 
+        #Stop the robot
         self.tank.off()
+        #Report the square
         self.report_black_square()
+        #Correct the angle deviation
         self.correction()
 
     def move_back(self, speed=20):
         """
-        Move forward as a tank until it hits a black square and update the position
+        Move back onto the last black square and do a correction
         :param speed: The speed to move
         :return: None
         """
-
-        self.position[0] -= self.direction[0]
-        self.position[1] -= self.direction[1]
         
         #We start on a black square so we initalise to being on a white square
         self.black_square_sensor.stop_reading()
-        self.black_square_sensor.start_reading(count=7, init_val=100, interval=0.1, wait_time=1)
+        self.black_square_sensor.start_reading(count=10, init_val=100, interval=0.1, wait_time=1)
         self.tank.on(SpeedPercent(-speed),SpeedPercent(-speed))
         #Block until we are over a black square
         while self.black_square_sensor.above_threshold():
@@ -215,7 +226,7 @@ class Robot:
 
     def move_number(self, n):
         """
-        Move forward a number of black squares n
+        Move forward a number n of black squares
         :param n: the number of squares to move forward
         :return: None
         """
@@ -235,39 +246,67 @@ class Robot:
         # Add half of position now, half later so we are sure to be in square
         self.position[0] += 0.5*self.direction[0]
         self.position[1] += 0.5*self.direction[1]
-        distance_threshold = 36
 
         #Do a quick rotate and check for the tower, in case we miss it moving forward
-        degree_check = 80
+        #Rotate the wheel this many degrees in each direction for a check
+        degree_check = 100
+        #Define the step of the check
         step = int(degree_check//10)
+        #Define the distance in cm that we can detect the tower at
+        distance_threshold = 30
+        #Check left
         for i in range(0, degree_check, step):
             self.tank.on_for_degrees(0, SpeedPercent(speed), step)
             if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
                 # We have found it!
                 self.report_tower()
                 return True
-            time.sleep(0.1)
+            #Sleep so we don't overload the ultrasonic sensor
+            time.sleep(0.125)
+        #Turn back to neutral
         self.tank.on_for_degrees(0, SpeedPercent(-speed), degree_check)
+        #Try again for right
         for i in range(0, degree_check, step):
             self.tank.on_for_degrees(SpeedPercent(speed), 0, step)
             if self.ultrasonic_sensor.distance_centimeters < distance_threshold:
                 # We have found it!
                 self.report_tower()
                 return True
-            time.sleep(0.1)
-        self.tank.on_for_degrees(SpeedPercent(-speed), 0, step)
+            time.sleep(0.125)
+        self.tank.on_for_degrees(SpeedPercent(-speed), 0, degree_check)
+        self.tank.off()
 
+        #Lower the distance threshold so we don;t detect the next square
         distance_threshold = 15
 
         #We are on a black square, so we initalise to white
         self.black_square_sensor.stop_reading()
         self.black_square_sensor.start_reading(count=7, init_val=100, interval=0.1, wait_time=1)
 
+        # Find the maximum time we can travel for in this direction before returning back along the path
+        MAX_TIME = abs(self.direction[0] * self.max_travel_times[0] + self.direction[1] * self.max_travel_times[1])
+        start = time.time()
+
         # Until we hit a black square, just keep moving forward
         self.tank.on(SpeedPercent(speed), SpeedPercent(speed))
         # Block until we are over a black square or until we sense something
         while self.black_square_sensor.above_threshold() and self.ultrasonic_sensor.distance_centimeters>distance_threshold and not self.touch_sensor.is_pressed:
-            continue
+            if time.time() - start > MAX_TIME:
+                self.tank.off()
+                self.position[0] -= 0.5*self.direction[0]
+                self.position[1] -= 0.5*self.direction[1]
+                self.move_back()
+                self.tank.on_for_degrees(SpeedPercent(-speed), SpeedPercent(speed), -1.87 *
+                                         5 * (math.floor((self.MISSED_TILE_ATTEMPT + 1) / 2)) * (
+                                             -1) ** self.MISSED_TILE_ATTEMPT
+                                         )
+                self.MISSED_TILE_ATTEMPT+=1
+                self.tank.on_for_degrees(SpeedPercent(-speed), SpeedPercent(speed), 1.87*
+                                         5*(math.floor((self.MISSED_TILE_ATTEMPT+1)/2)) * (-1)**self.MISSED_TILE_ATTEMPT
+                                         )
+                self.check_next()
+                self.MISSED_TILE_ATTEMPT=0
+                return None
         self.tank.off()
         if self.ultrasonic_sensor.distance_centimeters_continuous<distance_threshold or self.touch_sensor.is_pressed:
             # We have found it!
@@ -428,6 +467,7 @@ if __name__ == "__main__":
     robot.rotate(-1)
     #Move down to square 56
     robot.move_number(3)
+
     #Check the first column
     if robot.check_next_number(4):
         end(robot)
